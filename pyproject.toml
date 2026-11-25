@@ -11,8 +11,8 @@ requires-python = ">=3.10"
 license = "MIT"
 authors = [
     { name = "Sooriya" },
-    { name = "Barbara Vane", email = "barbaravane2703@gmail.com" },
 ]
+keywords = ["ai", "llm", "agents", "orchestration", "openai", "ollama"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -28,3 +28,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/Sooriya04/slimstack"
 Repository = "https://github.com/Sooriya04/slimstack"
+Issues = "https://github.com/Sooriya04/slimstack/issues"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
