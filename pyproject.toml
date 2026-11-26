@@ -9,6 +9,9 @@ description = "The unbloated AI stack: minimal, zero-dependency inference and ag
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+dependencies = [
+    "pydantic>=2.14.0",
+]
 authors = [
     { name = "Sooriya" },
 ]
