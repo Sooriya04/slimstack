@@ -6,3 +6,4 @@
 
 - [Message & Tool Contracts (`slimstack.types`)](messages.md) — Immutable, provider-agnostic `Role`, `ToolCall`, and `Message` contracts.
 - [Document & Chunk Contracts (`slimstack.types`)](documents.md) — Pure data representations `Document` and `Chunk` for RAG pipelines.
+- [Engine I/O Contracts (`slimstack.types`)](engine.md) — Provider-independent execution models `Usage`, `ModelResponse`, and `StreamChunk`.
