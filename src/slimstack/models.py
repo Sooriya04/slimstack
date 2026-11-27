@@ -61,7 +61,7 @@ class Model:
         return headers
 
     def _sanitize(self, text: str) -> str:
-        if self.api_key and self.api_key in text:
+        if self.api_key and len(self.api_key.strip()) > 3 and self.api_key in text:
             return text.replace(self.api_key, "[REDACTED]")
         return text
 

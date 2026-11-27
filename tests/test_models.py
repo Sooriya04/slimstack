@@ -300,3 +300,46 @@ async def test_empty_tool_calls_omitted_and_tool_null_content_coerced() -> None:
     assert req["messages"][1]["content"] == ""
     assert req["messages"][1]["tool_call_id"] == "call_999"
 
+
+@pytest.mark.asyncio
+async def test_network_timeout_and_non_json_response() -> None:
+    # 1. Connection timeout wrapping
+    def timeout_handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("Connection timed out to gateway")
+
+    client_timeout = _make_mock_client(timeout_handler)
+    model_timeout = Model(model_name="gpt-4o", client=client_timeout)
+
+    with pytest.raises(ModelError) as exc_info:
+        await model_timeout.agenerate([Message(role="user", content="Hi")])
+    assert "Network error communicating with" in str(exc_info.value)
+    assert "Connection timed out" in str(exc_info.value)
+
+    # 2. 200 OK with non-JSON HTML body
+    def html_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html><body>502 Bad Gateway</body></html>")
+
+    client_html = _make_mock_client(html_handler)
+    model_html = Model(model_name="gpt-4o", client=client_html)
+
+    with pytest.raises(ModelError) as exc_info:
+        await model_html.agenerate([Message(role="user", content="Hi")])
+    assert "Failed to parse JSON response from" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_short_api_key_does_not_over_redact() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, text="Invalid keyword provided in query")
+
+    # Key is only 3 chars long ("key")
+    client = _make_mock_client(handler)
+    model = Model(model_name="gpt-4o", api_key="key", client=client)
+
+    with pytest.raises(ModelError) as exc_info:
+        await model.agenerate([Message(role="user", content="Hi")])
+
+    # Should NOT over-redact "keyword" into "[REDACTED]word"
+    assert "Invalid keyword provided in query" in str(exc_info.value)
+
+
