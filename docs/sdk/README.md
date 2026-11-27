@@ -9,3 +9,4 @@
 - [Engine I/O Contracts (`slimstack.types`)](engine.md) — Provider-independent execution models `Usage`, `ModelResponse`, and `StreamChunk`.
 - [Model Engine (`slimstack.models`)](models.md) — Unified async client for OpenAI-compatible chat completions and streaming.
 - [Tool Reflection & Execution (`slimstack.tools`)](tools.md) — Lightweight `@tool` decorator, `ToolRegistry`, and argument-validated tool execution.
+- [Agent Execution Loop (`slimstack.agents`)](agents.md) — Autonomous agent loop connecting models and tools.
