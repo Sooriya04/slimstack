@@ -72,7 +72,9 @@ class Model:
                 "role": msg.role,
                 "content": msg.content,
             }
-            if msg.tool_calls is not None:
+            if msg.role == "tool" and msg.content is None:
+                item["content"] = ""
+            if msg.tool_calls:
                 item["tool_calls"] = [
                     {
                         "id": tc.id,
@@ -136,19 +138,20 @@ class Model:
             for tc in raw_tool_calls:
                 if not isinstance(tc, dict):
                     continue
-                tc_id = tc.get("id", "")
+                tc_id = tc.get("id") or ""
                 fn = tc.get("function", {})
-                name = fn.get("name", "") if isinstance(fn, dict) else ""
+                name = fn.get("name") or "" if isinstance(fn, dict) else ""
                 raw_args = fn.get("arguments", "{}") if isinstance(fn, dict) else "{}"
                 if isinstance(raw_args, str):
                     try:
-                        arguments = json.loads(raw_args)
+                        parsed = json.loads(raw_args)
+                        arguments = parsed if isinstance(parsed, dict) else {"raw": parsed}
                     except Exception:
                         arguments = {"raw": raw_args}
                 elif isinstance(raw_args, dict):
                     arguments = raw_args
                 else:
-                    arguments = {}
+                    arguments = {"raw": raw_args}
                 parsed_calls.append(ToolCall(id=tc_id, name=name, arguments=arguments))
             tool_calls = tuple(parsed_calls) if parsed_calls else None
 

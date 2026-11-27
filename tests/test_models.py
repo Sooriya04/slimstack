@@ -237,3 +237,66 @@ async def test_client_lifecycle_external_vs_internal() -> None:
         ctx_client = ctx_model._client
         assert not ctx_client.is_closed
     assert ctx_client.is_closed
+
+
+@pytest.mark.asyncio
+async def test_scalar_tool_arguments_wrapped_in_dict() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        resp_body = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_123",
+                                "type": "function",
+                                "function": {
+                                    "name": "calc",
+                                    "arguments": "42",  # scalar JSON number
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        }
+        return httpx.Response(200, json=resp_body)
+
+    client = _make_mock_client(handler)
+    model = Model(model_name="gpt-4o", client=client)
+
+    response = await model.agenerate([Message(role="user", content="calc")])
+    assert response.message.tool_calls is not None
+    assert response.message.tool_calls[0].arguments == {"raw": 42}
+
+
+@pytest.mark.asyncio
+async def test_empty_tool_calls_omitted_and_tool_null_content_coerced() -> None:
+    recorded_requests: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded_requests.append(json.loads(request.read()))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"role": "assistant", "content": "done"}}]},
+        )
+
+    client = _make_mock_client(handler)
+    model = Model(model_name="gpt-4o", client=client)
+
+    messages = [
+        Message(role="assistant", content="thought", tool_calls=()),  # empty tuple
+        Message(role="tool", content=None, tool_call_id="call_999"),  # null content
+    ]
+
+    await model.agenerate(messages)
+
+    req = recorded_requests[0]
+    # Empty tool_calls must NOT be serialized as "tool_calls": []
+    assert "tool_calls" not in req["messages"][0]
+    # Tool message with content=None must be serialized as ""
+    assert req["messages"][1]["content"] == ""
+    assert req["messages"][1]["tool_call_id"] == "call_999"
+
