@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 dependencies = [
+    "httpx>=0.28.1",
     "pydantic>=2.14.0",
 ]
 authors = [
@@ -34,4 +35,8 @@ Repository = "https://github.com/Sooriya04/slimstack"
 Issues = "https://github.com/Sooriya04/slimstack/issues"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23.0"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+
