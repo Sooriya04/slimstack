@@ -71,12 +71,21 @@ class Tool:
         cleaned_doc = inspect.cleandoc(raw_doc)
         self.description = description if description is not None else cleaned_doc
 
+        self._param_model: Any = None
         self._schema = self._build_schema()
 
     @property
     def schema(self) -> dict[str, Any]:
         """Return the OpenAI-compatible function calling schema."""
         return self._schema
+
+    def validate_arguments(self, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Validate and coerce arguments dictionary using the reflected parameter schema."""
+        args_dict = arguments or {}
+        if self._param_model is None:
+            return args_dict
+        validated = self._param_model(**args_dict)
+        return validated.model_dump()
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.func(*args, **kwargs)
@@ -126,8 +135,8 @@ class Tool:
                 fields[param_name] = (ann, field_info)
 
             model_name = f"{self.name.capitalize()}Parameters"
-            param_model = create_model(model_name, **fields)
-            parameters = param_model.model_json_schema()
+            self._param_model = create_model(model_name, **fields)
+            parameters = self._param_model.model_json_schema()
 
             # Clean up top-level title to keep schema standard
             parameters.pop("title", None)

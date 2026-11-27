@@ -1,34 +1,40 @@
-# Tool Reflection (`slimstack.tools`)
+# Tool Reflection & Execution (`slimstack.tools`)
 
-The `@tool` decorator converts standard Python functions into callable tools that automatically generate OpenAI-compatible JSON function schemas via Pydantic.
+The `slimstack.tools` package provides function schema reflection via `@tool`, along with a robust `ToolRegistry` for registering, inspecting, and safely executing `ToolCall` objects.
 
 ---
 
 ## 1. Quickstart & Command-Line Usage
 
-Test tool reflection directly in your terminal:
-
 ```bash
 uv run python -c '
-from typing import Annotated
-from slimstack import tool
+from slimstack import ToolRegistry, tool
+from slimstack.types import ToolCall
 
-@tool
-def get_weather(city: str, unit: Annotated[str, "Temperature unit: c or f"] = "c") -> str:
-    """Fetch the current weather forecast for a city.
+registry = ToolRegistry()
+
+@registry.register
+def calculate_area(width: float, height: float) -> float:
+    """Calculate the area of a rectangle.
 
     Args:
-        city: The name of the city (e.g. San Francisco).
-        unit: Metric or imperial units.
+        width: Rectangle width.
+        height: Rectangle height.
     """
-    return f"Weather in {city}: 22 degrees {unit}"
+    return width * height
 
-# Call like a regular function:
-print("Function call result:", get_weather("Paris"))
+# 1. Inspect OpenAI-compatible schema
+print("Schemas:\n", registry.get_schemas())
 
-# Inspect the generated OpenAI function schema:
-import json
-print("JSON Schema:\n", json.dumps(get_weather.schema, indent=2))
+# 2. Execute a ToolCall
+call = ToolCall(id="call_1", name="calculate_area", arguments={"width": 4.5, "height": 2.0})
+result = registry.execute(call)
+print("Execution success:", result.success)
+print("Result content:", result.content)
+
+# 3. Convert directly to a tool Message
+msg = result.to_message()
+print("Tool Message:", msg.model_dump())
 '
 ```
 
@@ -36,42 +42,33 @@ print("JSON Schema:\n", json.dumps(get_weather.schema, indent=2))
 
 ## 2. API Reference
 
-### `@tool(func=None, *, name=None, description=None)`
-Decorator producing a `Tool` instance wrapping the function.
+### `ToolRegistry(tools=None)`
+A registry and execution coordinator for callable `Tool` objects.
 
-- **`name`**: `str | None` — Custom tool name. If omitted, defaults to `func.__name__`.
-- **`description`**: `str | None` — Custom tool description. If omitted, defaults to the cleaned docstring (`inspect.cleandoc(func.__doc__)`).
+| Method | Return Type | Description |
+|---|---|---|
+| `register(tool_or_func, *, override=False)` | `Tool` | Registers a tool. Raises `ToolError` if duplicate unless `override=True`. |
+| `get(name)` | `Tool \| None` | Looks up a tool by name, returning `None` if not registered. |
+| `__getitem__(name)` | `Tool` | Looks up a tool by name, raising `KeyError` if not registered. |
+| `get_schemas()` | `list[dict]` | Returns OpenAI-compatible schemas for all registered tools. |
+| `execute(tool_call)` | `ToolResult` | Validates arguments and executes the tool, returning `ToolResult`. |
+| `execute_to_message(tool_call)` | `Message` | Executes and directly returns a `Message(role="tool", ...)`. |
 
-### `Tool` Attributes & Properties
-- **`tool.name`**: Name of the tool.
-- **`tool.description`**: Cleaned docstring or custom description.
-- **`tool.func`**: Reference to the original unwrapped function.
-- **`tool.schema`**: The OpenAI-compatible function schema dictionary:
-  ```json
-  {
-    "type": "function",
-    "function": {
-      "name": "...",
-      "description": "...",
-      "parameters": {
-        "type": "object",
-        "properties": { ... },
-        "required": [ ... ]
-      }
-    }
-  }
-  ```
-- **`tool(*args, **kwargs)`**: Directly calls the underlying function with supplied arguments.
+### `ToolResult`
+A frozen Pydantic model representing execution output:
+
+| Field | Type | Description |
+|---|---|---|
+| `tool_call_id` | `str` | Matching `id` of the executed `ToolCall`. |
+| `name` | `str` | Name of the tool. |
+| `content` | `str` | Formatted output or error string for LLM consumption. |
+| `success` | `bool` | `True` if execution succeeded, `False` on failure or error. |
+| `error` | `str \| None` | Exception message or validation failure details. |
+| `raw_output` | `Any` | Original unformatted Python return value. |
 
 ---
 
-## 3. Features & Supported Type Annotations
-
-1. **Standard Primitives:** `str`, `int`, `float`, `bool`.
-2. **Collections & Nested Types:** `list[str]`, `dict[str, Any]`, `list[dict[str, int]]`.
-3. **Optional Parameters:** `str | None = None` or `Optional[int] = None`. Parameters with defaults are automatically excluded from the `"required"` list.
-4. **Parameter Descriptions:**
-   - Extracted from `Annotated[T, "description"]` or `Annotated[T, Field(description="...")]`.
-   - Extracted from Google or Sphinx docstrings (`Args:`, `Parameters:`, `:param name: ...`).
-5. **Pydantic Nested Models:** If a parameter is annotated with a Pydantic `BaseModel`, its schema is reflected via standard `$defs` and `$ref`.
-6. **Zero Side-Effects:** Schema inspection uses `inspect` and `pydantic.create_model` without executing the underlying function.
+## 3. Error Handling & Safety
+1. **Pre-execution Argument Validation:** Arguments are validated against the function's Pydantic model before execution. Missing parameters or type mismatches yield a `ToolResult(success=False, error=...)` without crashing the app.
+2. **Exception Containment:** If a tool function raises an exception during execution (e.g. division by zero, network failure), `execute()` captures the error, stores the original exception message, and returns `success=False`.
+3. **Duplicate Protection:** Registering a tool with an existing name raises `ToolError` unless explicitly allowed via `override=True`.
