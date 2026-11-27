@@ -395,3 +395,67 @@ async def test_run_agent_convenience_helper() -> None:
     result = await run_agent(model, "Direct prompt")
     assert result.content == "Done directly."
     assert result.iterations == 1
+
+
+def test_agent_invalid_max_iterations() -> None:
+    model = _make_mock_model([])
+    with pytest.raises(ValueError, match="max_iterations must be at least 1"):
+        Agent(model=model, max_iterations=0)
+    with pytest.raises(ValueError, match="max_iterations must be at least 1"):
+        Agent(model=model, max_iterations=-5)
+
+
+@pytest.mark.asyncio
+async def test_agent_empty_history_validation() -> None:
+    model = _make_mock_model([])
+    agent = Agent(model=model)
+    with pytest.raises(ValueError, match="Cannot run agent with empty message history"):
+        await agent.run([])
+
+
+@pytest.mark.asyncio
+async def test_agent_executing_async_tool() -> None:
+    mock_responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_async_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "async_lookup",
+                                    "arguments": json.dumps({"key": "status"}),
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Looked up status: operational",
+                    }
+                }
+            ]
+        },
+    ]
+    model = _make_mock_model(mock_responses)
+
+    @tool
+    async def async_lookup(key: str) -> str:
+        return f"{key}: operational"
+
+    agent = Agent(model=model, tools=[async_lookup])
+    result = await agent.run("Check status")
+    assert result.content == "Looked up status: operational"
+    assert result.iterations == 2
+    assert result.messages[2].role == "tool"
+    assert result.messages[2].content == "status: operational"

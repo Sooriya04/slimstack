@@ -343,3 +343,21 @@ async def test_short_api_key_does_not_over_redact() -> None:
     assert "Invalid keyword provided in query" in str(exc_info.value)
 
 
+def test_model_name_and_alias() -> None:
+    # 1. Positional model name
+    m1 = Model("gpt-4o")
+    assert m1.model_name == "gpt-4o"
+
+    # 2. Keyword model_name
+    m2 = Model(model_name="gpt-4o-mini")
+    assert m2.model_name == "gpt-4o-mini"
+
+    # 3. Keyword model alias
+    m3 = Model(model="claude-3-5-sonnet")
+    assert m3.model_name == "claude-3-5-sonnet"
+
+    # 4. Neither raises ValueError
+    with pytest.raises(ValueError, match="A model name must be provided"):
+        Model()
+
+

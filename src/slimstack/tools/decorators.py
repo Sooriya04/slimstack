@@ -71,6 +71,14 @@ class Tool:
         cleaned_doc = inspect.cleandoc(raw_doc)
         self.description = description if description is not None else cleaned_doc
 
+        sig = inspect.signature(func)
+        self.is_async: bool = inspect.iscoroutinefunction(func)
+        self._pos_only_names: tuple[str, ...] = tuple(
+            name
+            for name, p in sig.parameters.items()
+            if p.kind == inspect.Parameter.POSITIONAL_ONLY
+        )
+
         self._param_model: Any = None
         self._schema = self._build_schema()
 
@@ -86,6 +94,20 @@ class Tool:
             return args_dict
         validated = self._param_model(**args_dict)
         return validated.model_dump()
+
+    def call_with_kwargs(self, kwargs: dict[str, Any]) -> Any:
+        """Call the underlying function, correctly binding positional-only arguments."""
+        kw = dict(kwargs)
+        args = [kw.pop(name) for name in self._pos_only_names if name in kw]
+        return self.func(*args, **kw)
+
+    async def acall_with_kwargs(self, kwargs: dict[str, Any]) -> Any:
+        """Call the underlying function asynchronously, supporting both sync and async callables."""
+        kw = dict(kwargs)
+        args = [kw.pop(name) for name in self._pos_only_names if name in kw]
+        if self.is_async:
+            return await self.func(*args, **kw)
+        return self.func(*args, **kw)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.func(*args, **kwargs)

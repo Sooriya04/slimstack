@@ -18,6 +18,8 @@ def _format_output(output: Any) -> str:
         return ""
     if isinstance(output, str):
         return output
+    if isinstance(output, BaseModel):
+        return output.model_dump_json()
     try:
         return json.dumps(output, default=str)
     except Exception:
@@ -96,7 +98,69 @@ class ToolRegistry:
         return [t.schema for t in self._tools.values()]
 
     def execute(self, tool_call: ToolCall) -> ToolResult:
-        """Execute a ToolCall by resolving the tool name and validating arguments."""
+        """Execute a ToolCall synchronously by resolving the tool name and validating arguments."""
+        t = self.get(tool_call.name)
+        if t is None:
+            err_msg = f"Error: Tool '{tool_call.name}' is not registered."
+            return ToolResult(
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                content=err_msg,
+                success=False,
+                error=err_msg,
+                raw_output=None,
+            )
+
+        if t.is_async:
+            err_msg = (
+                f"Error: Tool '{tool_call.name}' is asynchronous and cannot be executed "
+                "synchronously. Use aexecute() or run within an async Agent."
+            )
+            return ToolResult(
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                content=err_msg,
+                success=False,
+                error=err_msg,
+                raw_output=None,
+            )
+
+        try:
+            validated_kwargs = t.validate_arguments(tool_call.arguments)
+        except Exception as exc:
+            err_msg = f"Error: Invalid arguments for tool '{tool_call.name}': {exc}"
+            return ToolResult(
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                content=err_msg,
+                success=False,
+                error=str(exc),
+                raw_output=None,
+            )
+
+        try:
+            output = t.call_with_kwargs(validated_kwargs)
+            return ToolResult(
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                content=_format_output(output),
+                success=True,
+                error=None,
+                raw_output=output,
+            )
+        except Exception as exc:
+            err_msg = f"Error executing tool '{tool_call.name}': {exc}"
+            return ToolResult(
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                content=err_msg,
+                success=False,
+                error=str(exc),
+                raw_output=None,
+            )
+
+    async def aexecute(self, tool_call: ToolCall) -> ToolResult:
+        """Execute a ToolCall asynchronously (supports both sync and async tools)."""
         t = self.get(tool_call.name)
         if t is None:
             err_msg = f"Error: Tool '{tool_call.name}' is not registered."
@@ -123,7 +187,7 @@ class ToolRegistry:
             )
 
         try:
-            output = t(**validated_kwargs)
+            output = await t.acall_with_kwargs(validated_kwargs)
             return ToolResult(
                 tool_call_id=tool_call.id,
                 name=tool_call.name,
@@ -144,5 +208,10 @@ class ToolRegistry:
             )
 
     def execute_to_message(self, tool_call: ToolCall) -> Message:
-        """Execute a ToolCall and directly return a SlimStack Message."""
+        """Execute a ToolCall synchronously and directly return a SlimStack Message."""
         return self.execute(tool_call).to_message()
+
+    async def aexecute_to_message(self, tool_call: ToolCall) -> Message:
+        """Execute a ToolCall asynchronously and directly return a SlimStack Message."""
+        result = await self.aexecute(tool_call)
+        return result.to_message()

@@ -3,6 +3,7 @@
 import json
 from typing import Any
 
+from pydantic import BaseModel
 import pytest
 
 from slimstack.tools import Tool, ToolError, ToolRegistry, ToolResult, tool
@@ -186,3 +187,60 @@ def test_output_formatting_types() -> None:
     assert r_none.success is True
     assert r_none.content == ""
     assert r_none.raw_output is None
+
+
+@pytest.mark.asyncio
+async def test_async_tool_execution_safety_and_aexecute() -> None:
+    registry = ToolRegistry()
+
+    @registry.register
+    async def async_greet(name: str) -> str:
+        return f"async hello {name}"
+
+    call = ToolCall(id="call_async", name="async_greet", arguments={"name": "Alice"})
+
+    # 1. Synchronous execute() must fail cleanly without unawaited warning
+    sync_result = registry.execute(call)
+    assert sync_result.success is False
+    assert "asynchronous and cannot be executed synchronously" in sync_result.content
+
+    # 2. Asynchronous aexecute() succeeds
+    async_result = await registry.aexecute(call)
+    assert async_result.success is True
+    assert async_result.content == "async hello Alice"
+
+    # 3. aexecute_to_message() produces Message
+    msg = await registry.aexecute_to_message(call)
+    assert msg.role == "tool"
+    assert msg.content == "async hello Alice"
+    assert msg.tool_call_id == "call_async"
+
+
+def test_positional_only_tool_parameters() -> None:
+    registry = ToolRegistry()
+
+    @registry.register
+    def add_pos(a: int, /, b: int = 10) -> int:
+        return a + b
+
+    call = ToolCall(id="call_pos", name="add_pos", arguments={"a": 5, "b": 15})
+    res = registry.execute(call)
+    assert res.success is True
+    assert res.content == "20"
+
+
+def test_pydantic_model_output_formatting() -> None:
+    registry = ToolRegistry()
+
+    class UserProfile(BaseModel):
+        user_id: int
+        username: str
+
+    @registry.register
+    def get_user(uid: int) -> UserProfile:
+        return UserProfile(user_id=uid, username="lois")
+
+    call = ToolCall(id="call_model", name="get_user", arguments={"uid": 42})
+    res = registry.execute(call)
+    assert res.success is True
+    assert json.loads(res.content) == {"user_id": 42, "username": "lois"}

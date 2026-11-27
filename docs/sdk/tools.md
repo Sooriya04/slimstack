@@ -51,8 +51,10 @@ A registry and execution coordinator for callable `Tool` objects.
 | `get(name)` | `Tool \| None` | Looks up a tool by name, returning `None` if not registered. |
 | `__getitem__(name)` | `Tool` | Looks up a tool by name, raising `KeyError` if not registered. |
 | `get_schemas()` | `list[dict]` | Returns OpenAI-compatible schemas for all registered tools. |
-| `execute(tool_call)` | `ToolResult` | Validates arguments and executes the tool, returning `ToolResult`. |
-| `execute_to_message(tool_call)` | `Message` | Executes and directly returns a `Message(role="tool", ...)`. |
+| `execute(tool_call)` | `ToolResult` | Validates arguments and executes a synchronous tool, returning `ToolResult`. |
+| `aexecute(tool_call)` | `ToolResult` | Asynchronously executes a tool, supporting both sync and async functions. |
+| `execute_to_message(tool_call)` | `Message` | Executes synchronously and directly returns a `Message(role="tool", ...)`. |
+| `aexecute_to_message(tool_call)` | `Message` | Executes asynchronously and directly returns a `Message(role="tool", ...)`. |
 
 ### `ToolResult`
 A frozen Pydantic model representing execution output:

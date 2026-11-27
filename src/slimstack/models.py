@@ -25,13 +25,18 @@ class Model:
 
     def __init__(
         self,
-        model_name: str,
+        model_name: str | None = None,
         base_url: str = "https://api.openai.com/v1",
         api_key: str | None = None,
         client: httpx.AsyncClient | None = None,
         timeout: float | httpx.Timeout | None = 60.0,
+        *,
+        model: str | None = None,
     ) -> None:
-        self.model_name = model_name
+        resolved_name = model_name or model
+        if not resolved_name:
+            raise ValueError("A model name must be provided via 'model_name' or 'model'.")
+        self.model_name = resolved_name
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY")
         self.timeout = timeout

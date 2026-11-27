@@ -54,6 +54,8 @@ class Agent:
             self.tools = ToolRegistry()
 
         self.system_prompt = system_prompt
+        if max_iterations < 1:
+            raise ValueError("max_iterations must be at least 1.")
         self.max_iterations = max_iterations
 
     async def run(
@@ -71,6 +73,9 @@ class Agent:
         if self.system_prompt:
             if not history or history[0].role != "system":
                 history.insert(0, Message(role="system", content=self.system_prompt))
+
+        if not history:
+            raise ValueError("Cannot run agent with empty message history.")
 
         iteration = 0
         last_response: ModelResponse | None = None
@@ -97,7 +102,7 @@ class Agent:
 
             # Execute all requested tool calls in order
             for tool_call in last_response.message.tool_calls:
-                tool_msg = self.tools.execute_to_message(tool_call)
+                tool_msg = await self.tools.aexecute_to_message(tool_call)
                 history.append(tool_msg)
 
         # Iteration limit reached without terminal text response
